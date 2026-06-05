@@ -20,39 +20,28 @@ PDF_FILES = [
 
 @st.cache_resource
 def load_docs():
-    pages = []
+    all_text = ""
     for filename in PDF_FILES:
         try:
             url = GITHUB_RAW + requests.utils.quote(filename)
             r = requests.get(url, timeout=30)
             if r.status_code == 200:
                 reader = PyPDF2.PdfReader(io.BytesIO(r.content))
-                for i, page in enumerate(reader.pages):
+                for page in reader.pages:
                     t = page.extract_text()
-                    if t and len(t.strip()) > 30:
-                        pages.append({
-                            "file": filename[:30],
-                            "page": i+1,
-                            "text": t[:500]
-                        })
+                    if t:
+                        all_text += t[:200] + "\n"
         except:
             pass
-    return pages
+    return all_text
 
-pages = load_docs()
-if pages:
-    st.success(f"✅ Loaded {len(pages)} pages")
+with st.spinner("Loading..."):
+    doc_text = load_docs()
+
+if doc_text:
+    st.success("✅ Documents loaded!")
 else:
-    st.error("Failed to load documents")
-
-def search(query, pages, n=2):
-    words = query.lower().split()
-    scored = []
-    for p in pages:
-        s = sum(1 for w in words if w in p["text"].lower())
-        scored.append((s, p))
-    scored.sort(reverse=True)
-    return scored[:n]
+    st.error("Failed to load")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -66,22 +55,18 @@ if prompt := st.chat_input("Ask question..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    results = search(prompt, pages)
-    context = ""
-    for score, p in results:
-        context += f"[{p['file']} p{p['page']}]: {p['text']}\n\n"
-
-    msg = f"Documents:\n{context}\nQuestion: {prompt}\nAnswer briefly:"
+    context = doc_text[:500]
+    msg = "Context: " + context + " Question: " + prompt + " Give short answer."
 
     try:
         resp = client.chat.completions.create(
             model="llama3-8b-8192",
             messages=[{"role":"user","content":msg}],
-            max_tokens=200
+            max_tokens=150
         )
         answer = resp.choices[0].message.content
     except Exception as e:
-        answer = "Error: " + str(e)[:100]
+        answer = "Error: " + str(e)[:200]
 
     st.session_state.messages.append({"role":"assistant","content":answer})
     with st.chat_message("assistant"):
