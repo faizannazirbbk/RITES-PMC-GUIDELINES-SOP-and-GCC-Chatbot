@@ -1,8 +1,8 @@
 import streamlit as st
 import groq
 import PyPDF2
-import os
 import requests
+import io
 
 st.set_page_config(page_title="RITES PMC Chatbot", page_icon="🏗️")
 st.title("🏗️ RITES PMC Guidelines Chatbot")
@@ -10,7 +10,6 @@ st.caption("Ask questions about GCC, SOP and PMC Guidelines")
 
 client = groq.Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# ── Auto-load PDFs from GitHub ─────────────────────
 GITHUB_RAW = "https://raw.githubusercontent.com/faizannazirbbk/RITES-PMC-GUIDELINES-SOP-and-GCC-Chatbot/main/"
 
 PDF_FILES = [
@@ -22,33 +21,43 @@ PDF_FILES = [
 
 @st.cache_resource
 def load_documents():
-    pdf_text = ""
-    loaded = []
+    all_chunks = []
     for filename in PDF_FILES:
         try:
             url = GITHUB_RAW + requests.utils.quote(filename)
-            response = requests.get(url)
+            response = requests.get(url, timeout=30)
             if response.status_code == 200:
-                import io
                 reader = PyPDF2.PdfReader(io.BytesIO(response.content))
-                for page in reader.pages:
+                for i, page in enumerate(reader.pages):
                     text = page.extract_text()
-                    if text:
-                        pdf_text += text + "\n"
-                loaded.append(filename)
-        except:
-            pass
-    return pdf_text, loaded
+                    if text and len(text.strip()) > 50:
+                        all_chunks.append({
+                            "text": text[:1000],
+                            "source": filename,
+                            "page": i+1
+                        })
+        except Exception as e:
+            st.warning(f"Could not load: {filename}")
+    return all_chunks
+
+def find_relevant(chunks, question, max_chunks=3):
+    question_words = question.lower().split()
+    scored = []
+    for chunk in chunks:
+        score = sum(1 for word in question_words 
+                   if word in chunk["text"].lower())
+        scored.append((score, chunk))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [c for _, c in scored[:max_chunks]]
 
 with st.spinner("📚 Loading documents..."):
-    pdf_text, loaded_files = load_documents()
+    chunks = load_documents()
 
-if loaded_files:
-    st.success(f"✅ {len(loaded_files)} documents loaded automatically!")
+if chunks:
+    st.success(f"✅ Documents loaded! ({len(chunks)} sections)")
 else:
-    st.error("❌ Could not load documents. Please check repository.")
+    st.error("❌ Could not load documents.")
 
-# ── Chat History ───────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -56,32 +65,45 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# ── User Input ─────────────────────────────────────
 if prompt := st.chat_input("Ask your question here..."):
-    st.session_state.messages.append({"role":"user","content":prompt})
+    st.session_state.messages.append(
+        {"role":"user","content":prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    system_msg = """You are an expert on RITES PMC Guidelines, GCC and SOP documents.
-Answer only from the provided documents.
-If answer is not found, say 'This information is not available in the provided documents.'
-Be precise and mention clause numbers where possible."""
+    relevant = find_relevant(chunks, prompt)
+    context = ""
+    sources = []
+    for chunk in relevant:
+        context += f"\n---\n{chunk['text']}"
+        sources.append(f"{chunk['source']} (Page {chunk['page']})")
 
-    if pdf_text:
-        context = pdf_text[:4000]
-        full_prompt = f"Documents:\n{context}\n\nQuestion: {prompt}"
-    else:
-        full_prompt = prompt
+    system_msg = """You are an expert on RITES PMC Guidelines, GCC and SOP.
+Answer only from the provided document sections.
+If not found say: 'Not found in the provided documents.'
+Always mention clause numbers if available."""
 
-    response = client.chat.completions.create(
-        model="llama3-70b-8192",
-        messages=[
-            {"role":"system","content":system_msg},
-            {"role":"user","content":full_prompt}
-        ]
-    )
+    full_prompt = f"""Document sections:
+{context}
 
-    answer = response.choices[0].message.content
-    st.session_state.messages.append({"role":"assistant","content":answer})
+Question: {prompt}"""
+
+    try:
+        response = client.chat.completions.create(
+            model="llama3-70b-8192",
+            messages=[
+                {"role":"system","content":system_msg},
+                {"role":"user","content":full_prompt}
+            ],
+            max_tokens=1000
+        )
+        answer = response.choices[0].message.content
+        if sources:
+            answer += f"\n\n📄 **Sources:** {', '.join(set(sources))}"
+    except Exception as e:
+        answer = "Error getting response. Please try again."
+
+    st.session_state.messages.append(
+        {"role":"assistant","content":answer})
     with st.chat_message("assistant"):
         st.markdown(answer)
