@@ -21,30 +21,43 @@ PDF_FILES = [
 
 @st.cache_resource
 def load_docs():
-    all_text = ""
-    count = 0
+    pages = []
     for filename in PDF_FILES:
         try:
             url = GITHUB_RAW + requests.utils.quote(filename)
             r = requests.get(url, timeout=30)
             if r.status_code == 200:
                 reader = PyPDF2.PdfReader(io.BytesIO(r.content))
-                for page in reader.pages:
+                for i, page in enumerate(reader.pages):
                     t = page.extract_text()
-                    if t:
-                        all_text += t + "\n"
-                count += 1
+                    if t and len(t.strip()) > 20:
+                        pages.append({
+                            "source": filename,
+                            "page": i+1,
+                            "text": t
+                        })
         except:
             pass
-    return all_text, count
+    return pages
 
 with st.spinner("📚 Loading documents..."):
-    doc_text, count = load_docs()
+    pages = load_docs()
 
-if count > 0:
-    st.success(f"✅ {count} documents loaded!")
+if pages:
+    st.success(f"✅ {len(pages)} pages loaded from 4 documents!")
 else:
     st.error("❌ Failed to load documents")
+
+def smart_search(query, pages, top_n=5):
+    keywords = query.lower().split()
+    scored = []
+    for p in pages:
+        text_lower = p["text"].lower()
+        score = sum(text_lower.count(kw) for kw in keywords)
+        if score > 0:
+            scored.append((score, p))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [p for _, p in scored[:top_n]]
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -58,24 +71,32 @@ if prompt := st.chat_input("Ask your question..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    context = doc_text[:9000]
-    full_prompt = f"""You are an expert assistant for RITES PMC Guidelines, GCC and SOP.
-Answer accurately from the documents below.
-Mention clause numbers where available.
-If not found in documents say so clearly.
+    relevant = smart_search(prompt, pages)
 
-DOCUMENTS:
+    if relevant:
+        context = ""
+        for p in relevant:
+            context += f"\n[{p['source'][:40]} - Page {p['page']}]\n{p['text'][:800]}\n"
+    else:
+        context = "\n".join([p["text"][:300] for p in pages[:5]])
+
+    full_prompt = f"""You are an expert assistant for RITES PMC Guidelines, GCC and SOP documents.
+Answer accurately and in detail from the document sections below.
+Always mention source document name and clause/page number.
+If not found say clearly: 'This topic is not covered in the provided documents.'
+
+RELEVANT DOCUMENT SECTIONS:
 {context}
 
 QUESTION: {prompt}
 
-ANSWER:"""
+DETAILED ANSWER:"""
 
     try:
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role":"user","content":full_prompt}],
-            max_tokens=400
+            max_tokens=600
         )
         answer = response.choices[0].message.content
     except Exception as e:
