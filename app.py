@@ -68,7 +68,7 @@ If answer is not found, say 'This information is not available in the provided d
 Be precise and mention clause numbers where possible."""
 
     if pdf_text:
-        context = pdf_text[:8000]
+        context = pdf_text[:4000]
         full_prompt = f"Documents:\n{context}\n\nQuestion: {prompt}"
     else:
         full_prompt = prompt
