@@ -60,7 +60,7 @@ if prompt := st.chat_input("Ask question..."):
 
     try:
         resp = client.chat.completions.create(
-            model="deepseek-r1-distill-llama-70b",
+            model="llama-3.3-70b-versatile",
             messages=[{"role":"user","content":msg}],
             max_tokens=150
         )
