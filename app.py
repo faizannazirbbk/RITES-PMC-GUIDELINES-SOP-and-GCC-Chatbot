@@ -2,14 +2,13 @@ import streamlit as st
 import PyPDF2
 import requests
 import io
-import google.generativeai as genai
+from groq import Groq
 
 st.set_page_config(page_title="RITES PMC Chatbot", page_icon="🏗️")
 st.title("🏗️ RITES PMC Guidelines Chatbot")
-st.caption("Powered by Google Gemini")
+st.caption("Powered by Groq AI")
 
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-model = genai.GenerativeModel("gemini-2.0-flash")
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 GITHUB_RAW = "https://raw.githubusercontent.com/faizannazirbbk/RITES-PMC-GUIDELINES-SOP-and-GCC-Chatbot/main/"
 
@@ -59,11 +58,11 @@ if prompt := st.chat_input("Ask your question..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    context = doc_text[:15000]
-    full_prompt = f"""You are an expert assistant for RITES PMC Guidelines, GCC and SOP documents.
-Use the following document content to answer the question accurately.
-Always mention relevant clause numbers if available.
-If the answer is not in the documents, say so clearly.
+    context = doc_text[:2000]
+    full_prompt = f"""You are an expert assistant for RITES PMC Guidelines, GCC and SOP.
+Answer accurately from the documents below.
+Mention clause numbers where available.
+If not found in documents say so clearly.
 
 DOCUMENTS:
 {context}
@@ -73,8 +72,12 @@ QUESTION: {prompt}
 ANSWER:"""
 
     try:
-        response = model.generate_content(full_prompt)
-        answer = response.text
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role":"user","content":full_prompt}],
+            max_tokens=400
+        )
+        answer = response.choices[0].message.content
     except Exception as e:
         answer = "Error: " + str(e)[:200]
 
