@@ -6,7 +6,6 @@ from groq import Groq
 
 st.set_page_config(page_title="RITES PMC Chatbot", page_icon="🏗️")
 st.title("🏗️ RITES PMC Guidelines Chatbot")
-st.caption("Ask questions about GCC, SOP and PMC Guidelines")
 
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
@@ -20,51 +19,70 @@ PDF_FILES = [
 ]
 
 @st.cache_resource
-def load_documents():
-    all_text = ""
-    count = 0
+def load_docs():
+    pages = []
     for filename in PDF_FILES:
         try:
             url = GITHUB_RAW + requests.utils.quote(filename)
             r = requests.get(url, timeout=30)
             if r.status_code == 200:
                 reader = PyPDF2.PdfReader(io.BytesIO(r.content))
-                for page in reader.pages:
+                for i, page in enumerate(reader.pages):
                     t = page.extract_text()
-                    if t:
-                        all_text += t + "\n"
-                count += 1
-        except Exception:
+                    if t and len(t.strip()) > 30:
+                        pages.append({
+                            "file": filename[:30],
+                            "page": i+1,
+                            "text": t[:500]
+                        })
+        except:
             pass
-    return all_text, count
+    return pages
 
-with st.spinner("Loading documents..."):
-    pdf_text, count = load_documents()
-
-if count > 0:
-    st.success("Documents loaded: " + str(count))
+pages = load_docs()
+if pages:
+    st.success(f"✅ Loaded {len(pages)} pages")
 else:
-    st.warning("Documents not loaded")
+    st.error("Failed to load documents")
+
+def search(query, pages, n=2):
+    words = query.lower().split()
+    scored = []
+    for p in pages:
+        s = sum(1 for w in words if w in p["text"].lower())
+        scored.append((s, p))
+    scored.sort(reverse=True)
+    return scored[:n]
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
 
-if prompt := st.chat_input("Ask your question here..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+if prompt := st.chat_input("Ask question..."):
+    st.session_state.messages.append({"role":"user","content":prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
-    context = pdf_text[:1500]
-    full_prompt = "You are an expert on RITES PMC Guidelines. Use these documents: " + context + " Answer this: " + prompt
-    response = client.chat.completions.create(
-        model="llama3-8b-8192",
-        messages=[{"role": "user", "content": full_prompt}],
-        max_tokens=300
-    )
-    answer = response.choices[0].message.content
-    st.session_state.messages.append({"role": "assistant", "content": answer})
+
+    results = search(prompt, pages)
+    context = ""
+    for score, p in results:
+        context += f"[{p['file']} p{p['page']}]: {p['text']}\n\n"
+
+    msg = f"Documents:\n{context}\nQuestion: {prompt}\nAnswer briefly:"
+
+    try:
+        resp = client.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[{"role":"user","content":msg}],
+            max_tokens=200
+        )
+        answer = resp.choices[0].message.content
+    except Exception as e:
+        answer = "Error: " + str(e)[:100]
+
+    st.session_state.messages.append({"role":"assistant","content":answer})
     with st.chat_message("assistant"):
         st.markdown(answer)
