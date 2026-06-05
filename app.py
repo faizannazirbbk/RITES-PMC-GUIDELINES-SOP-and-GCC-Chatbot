@@ -57,12 +57,12 @@ if prompt := st.chat_input("Ask your question here..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
-    context = pdf_text[:2000]
+    context = pdf_text[:1500]
     full_prompt = "You are an expert on RITES PMC Guidelines. Use these documents: " + context + " Answer this: " + prompt
     response = client.chat.completions.create(
         model="llama3-8b-8192",
         messages=[{"role": "user", "content": full_prompt}],
-        max_tokens=500
+        max_tokens=300
     )
     answer = response.choices[0].message.content
     st.session_state.messages.append({"role": "assistant", "content": answer})
