@@ -58,7 +58,7 @@ if prompt := st.chat_input("Ask your question..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    context = doc_text[:2000]
+    context = doc_text[:6000]
     full_prompt = f"""You are an expert assistant for RITES PMC Guidelines, GCC and SOP.
 Answer accurately from the documents below.
 Mention clause numbers where available.
