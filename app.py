@@ -8,11 +8,7 @@ st.set_page_config(page_title="RITES PMC Chatbot", page_icon="🏗️")
 st.title("🏗️ RITES PMC Guidelines Chatbot")
 st.caption("Ask questions about GCC, SOP and PMC Guidelines")
 
-try:
-    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-except:
-    st.error("API Key error!")
-    st.stop()
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 GITHUB_RAW = "https://raw.githubusercontent.com/faizannazirbbk/RITES-PMC-GUIDELINES-SOP-and-GCC-Chatbot/main/"
 
@@ -38,17 +34,17 @@ def load_documents():
                     if t:
                         all_text += t + "\n"
                 count += 1
-        except:
+        except Exception:
             pass
     return all_text, count
 
-with st.spinner("📚 Loading documents..."):
+with st.spinner("Loading documents..."):
     pdf_text, count = load_documents()
 
 if count > 0:
-    st.success(f"✅ {count} documents loaded!")
+    st.success("Documents loaded: " + str(count))
 else:
-    st.warning("⚠️ Documents not loaded")
+    st.warning("Documents not loaded")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -58,32 +54,17 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
 
 if prompt := st.chat_input("Ask your question here..."):
-    st.session_state.messages.append({"role":"user","content":prompt})
+    st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
-
-    context = pdf_text[:3000] if pdf_text else ""
-    
-    full_prompt = f"""You are an expert on RITES PMC Guidelines, GCC and SOP.
-Use these document excerpts to answer:
-
-{context}
-
-Question: {prompt}
-
-Answer clearly and mention clause numbers if found."""
-
-    try:
-        response = client.chat.completions.create(
-            model="llama3-8b-8192",
-            messages=[{"role":"user","content":full_prompt}],
-            max_tokens=500,
-            temperature=0.1
-        )
-        answer = response.choices[0].message.content
-    except Exception as e:
-        answer = f"Error: {str(e)}"
-
-    st.session_state.messages.append({"role":"assistant","content":answer})
+    context = pdf_text[:2000]
+    full_prompt = "You are an expert on RITES PMC Guidelines. Use these documents: " + context + " Answer this: " + prompt
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=[{"role": "user", "content": full_prompt}],
+        max_tokens=500
+    )
+    answer = response.choices[0].message.content
+    st.session_state.messages.append({"role": "assistant", "content": answer})
     with st.chat_message("assistant"):
-        st.markdown(answer
+        st.markdown(answer)
