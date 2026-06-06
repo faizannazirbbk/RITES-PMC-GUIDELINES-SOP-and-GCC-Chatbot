@@ -3,6 +3,7 @@ import PyPDF2
 import requests
 import io
 from groq import Groq
+from docx import Document
 
 st.set_page_config(page_title="RITES PMC Chatbot", page_icon="🏗️")
 st.title("🏗️ RITES PMC Guidelines Chatbot")
@@ -12,39 +13,55 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 GITHUB_RAW = "https://raw.githubusercontent.com/faizannazirbbk/RITES-PMC-GUIDELINES-SOP-and-GCC-Chatbot/main/"
 
-PDF_FILES = [
-    "Guidelines on Procurement of Works, Goods and Services, July 2023.pdf",
-    "SOP Updated as on 01.07.2025.pdf",
-    "RITES_GCC_for_Works,_February_2023_pdf-2023-Feb-25-11-14-35.pdf",
-    "Correction_Slip_3_GCC_Works_pdf-2026-Jan-20-16-25-46.pdf"
+FILES = [
+    {"name": "Guidelines on Procurement of Works, Goods and Services, July 2023.pdf", "type": "pdf"},
+    {"name": "RITES_SOP_2025_Formatted.docx", "type": "docx"},
+    {"name": "RITES_GCC_for_Works,_February_2023_pdf-2023-Feb-25-11-14-35.pdf", "type": "pdf"},
+    {"name": "Correction_Slip_3_GCC_Works.docx", "type": "docx"}
 ]
 
 @st.cache_resource
 def load_docs():
     pages = []
-    for filename in PDF_FILES:
+    for file in FILES:
         try:
-            url = GITHUB_RAW + requests.utils.quote(filename)
+            url = GITHUB_RAW + requests.utils.quote(file["name"])
             r = requests.get(url, timeout=30)
             if r.status_code == 200:
-                reader = PyPDF2.PdfReader(io.BytesIO(r.content))
-                for i, page in enumerate(reader.pages):
-                    t = page.extract_text()
-                    if t and len(t.strip()) > 20:
-                        pages.append({
-                            "source": filename,
-                            "page": i+1,
-                            "text": t
-                        })
-        except:
-            pass
+                if file["type"] == "pdf":
+                    reader = PyPDF2.PdfReader(io.BytesIO(r.content))
+                    for i, page in enumerate(reader.pages):
+                        t = page.extract_text()
+                        if t and len(t.strip()) > 20:
+                            pages.append({
+                                "source": file["name"][:40],
+                                "page": i+1,
+                                "text": t
+                            })
+                elif file["type"] == "docx":
+                    doc = Document(io.BytesIO(r.content))
+                    full_text = ""
+                    for para in doc.paragraphs:
+                        if para.text.strip():
+                            full_text += para.text + "\n"
+                    chunk_size = 1000
+                    for i in range(0, len(full_text), chunk_size):
+                        chunk = full_text[i:i+chunk_size]
+                        if chunk.strip():
+                            pages.append({
+                                "source": file["name"][:40],
+                                "page": i//chunk_size + 1,
+                                "text": chunk
+                            })
+        except Exception as e:
+            st.warning(f"Could not load: {file['name'][:30]}")
     return pages
 
-with st.spinner("📚 Loading documents..."):
+with st.spinner("📚 Loading all documents..."):
     pages = load_docs()
 
 if pages:
-    st.success(f"✅ {len(pages)} pages loaded from 4 documents!")
+    st.success(f"✅ {len(pages)} sections loaded from 4 documents!")
 else:
     st.error("❌ Failed to load documents")
 
@@ -69,39 +86,4 @@ for m in st.session_state.messages:
 if prompt := st.chat_input("Ask your question..."):
     st.session_state.messages.append({"role":"user","content":prompt})
     with st.chat_message("user"):
-        st.markdown(prompt)
-
-    relevant = smart_search(prompt, pages)
-
-    if relevant:
-        context = ""
-        for p in relevant:
-            context += f"\n[{p['source'][:40]} - Page {p['page']}]\n{p['text'][:800]}\n"
-    else:
-        context = "\n".join([p["text"][:300] for p in pages[:5]])
-
-    full_prompt = f"""You are an expert assistant for RITES PMC Guidelines, GCC and SOP documents.
-Answer accurately and in detail from the document sections below.
-Always mention source document name and clause/page number.
-If not found say clearly: 'This topic is not covered in the provided documents.'
-
-RELEVANT DOCUMENT SECTIONS:
-{context}
-
-QUESTION: {prompt}
-
-DETAILED ANSWER:"""
-
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role":"user","content":full_prompt}],
-            max_tokens=600
-        )
-        answer = response.choices[0].message.content
-    except Exception as e:
-        answer = "Error: " + str(e)[:200]
-
-    st.session_state.messages.append({"role":"assistant","content":answer})
-    with st.chat_message("assistant"):
-        st.markdown(answer)
+        st.markdown(prompt
