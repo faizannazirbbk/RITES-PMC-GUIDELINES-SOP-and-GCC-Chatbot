@@ -2,4 +2,3 @@ streamlit
 groq
 PyPDF2
 requests
-python-docx
