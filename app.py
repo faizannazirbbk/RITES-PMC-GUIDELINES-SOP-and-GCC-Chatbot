@@ -12,9 +12,9 @@ client=Groq(api_key=st.secrets["GROQ_API_KEY"])
 GITHUB_RAW="https://raw.githubusercontent.com/faizannazirbbk/RITES-PMC-GUIDELINES-SOP-and-GCC-Chatbot/main/"
 FILES=[
 {"name":"Guidelines on Procurement of Works, Goods and Services, July 2023.pdf","type":"pdf"},
-{"name":"RITES_SOP_2025_Formatted.docx","type":"docx"},
+{"name":"RITES_SOP_2025_Formatted.pdf","type":"pdf"},
 {"name":"RITES_GCC_for_Works,_February_2023_pdf-2023-Feb-25-11-14-35.pdf","type":"pdf"},
-{"name":"Correction_Slip_3_GCC_Works.docx","type":"docx"}
+{"name":"Correction_Slip_3_GCC_Works.pdf","type":"pdf"}
 ]
 @st.cache_resource
 def load_docs():
