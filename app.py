@@ -3,7 +3,6 @@ import PyPDF2
 import requests
 import io
 from groq import Groq
-from docx import Document
 
 st.set_page_config(page_title="RITES PMC Chatbot",page_icon="🏗️")
 st.title("🏗️ RITES PMC Guidelines Chatbot")
