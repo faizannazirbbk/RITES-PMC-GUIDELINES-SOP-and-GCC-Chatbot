@@ -25,7 +25,8 @@ def load_docs():
             if r.status_code==200:
                 reader=PyPDF2.PdfReader(io.BytesIO(r.content))
                 for i,page in enumerate(reader.pages):
-                   
+                    t=page.extract_text(extraction_mode="layout")
+                    if not t or len(t.strip())<10:
                         t=page.extract_text()
                     if t and len(t.strip())>10:
                         pages.append({"source":filename[:45],"page":i+1,"text":t})
