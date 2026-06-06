@@ -1,7 +1,7 @@
 import streamlit as st
+import PyPDF2
 import requests
 import io
-import pdfplumber
 from groq import Groq
 
 st.set_page_config(page_title="RITES PMC Chatbot",page_icon="🏗️")
@@ -23,19 +23,21 @@ def load_docs():
             url=GITHUB_RAW+requests.utils.quote(filename)
             r=requests.get(url,timeout=30)
             if r.status_code==200:
-                with pdfplumber.open(io.BytesIO(r.content)) as pdf:
-                    for i,page in enumerate(pdf.pages):
+                reader=PyPDF2.PdfReader(io.BytesIO(r.content))
+                for i,page in enumerate(reader.pages):
+                    t=page.extract_text(extraction_mode="layout")
+                    if not t or len(t.strip())<10:
                         t=page.extract_text()
-                        if t and len(t.strip())>20:
-                            pages.append({"source":filename[:45],"page":i+1,"text":t})
+                    if t and len(t.strip())>10:
+                        pages.append({"source":filename[:45],"page":i+1,"text":t})
         except Exception as ex:
-            st.warning(f"Error: {filename[:30]} - {str(ex)[:50]}")
+            st.warning(f"Could not load: {filename[:30]}")
     return pages
 with st.spinner("Loading documents..."):
     pages=load_docs()
 sources=list(set([p["source"] for p in pages]))
 if pages:
-    st.success(f"✅ {len(pages)} pages from {len(sources)} documents!")
+    st.success(f"✅ {len(pages)} pages from {len(sources)} docs!")
     for s in sources:
         c=len([p for p in pages if p["source"]==s])
         st.write(f"📄 {s[:40]}: {c} pages")
