@@ -63,7 +63,7 @@ if prompt:=st.chat_input("Ask your question..."):
     context="".join([f"\n[{p['source']} Sec {p['page']}]\n{p['text'][:600]}\n" for p in relevant])
     msg=f"You are RITES PMC expert. Answer from documents only. Mention source and clause.\n\nDOCS:{context}\n\nQ:{prompt}\n\nANSWER:"
     try:
-        resp=client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":msg}],max_tokens=600)
+        resp=client.chat.completions.create(model="openai/gpt-oss-20b",messages=[{"role":"user","content":msg}],max_tokens=600)
         answer=resp.choices[0].message.content
     except Exception as e:
         answer="Error: "+str(e)[:200]
